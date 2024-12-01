@@ -1,0 +1,3 @@
+﻿token = '7383628698:AAFy5BlC7EzXd1KTY8k4D9JT9axcvY_Ib_8'
+developer_id = 6436883389
+channel_id = -1002311275060
