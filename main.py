@@ -40,7 +40,11 @@ async def post_message(message):
 
 async def set_changelog(message):
     if message.from_user.id == config.developer_id:
-        message_for_edit = await bot.send_message(config.channel_id, 'Подготовка...')
+        global message_for_edit
+        if config.debug:
+            message_for_edit = await bot.send_message(config.developer_id, 'Подготовка...')
+        else:
+            message_for_edit = await bot.send_message(config.channel_id, 'Подготовка...')
         await bot.reply_to(message,
                            f'<a href="https://t.me/sgbuild/{message_for_edit.message_id}">Сборка уже публикуется в канале!</a>'
                            , parse_mode='HTML')
@@ -67,15 +71,19 @@ async def build_and_archive_solution(message, configuration, solution_path, arch
                     zip_file.write(full_path, arcname=relative_path)
     await bot.edit_message_text('Отправка...', message.chat.id, message.message_id)
     current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    await bot.send_document(config.channel_id, InputFile(open(archive_path, 'rb'),
-                                                         f"sakuragram_Windows_{configuration}_{current_time}.zip"),
-                            caption=caption)
-    await bot.delete_message(config.channel_id, message.message_id)
+    file = InputFile(open(archive_path, 'rb'),f"sakuragram_Windows_{configuration}_{current_time}.zip")
+
+    if config.debug:
+        await bot.send_document(config.developer_id, file,caption=caption)
+        await bot.delete_message(config.developer_id, message.message_id)
+    else:
+        await bot.send_document(config.channel_id, file, caption=caption)
+        await bot.delete_message(config.channel_id, message.message_id)
 
 
 if __name__ == '__main__':
     print('Bot is running...')
-    asyncio.run(bot.send_message(config.developer_id, 'Бот работает.'))
+    asyncio.run(bot.send_message(config.developer_id, f'Бот работает.\nDebug mode: {config.debug}'))
     asyncio.run(bot.polling())
     print('Bot stopped.')
     asyncio.run(bot.send_message(config.developer_id, 'Бот остановлен.'))
