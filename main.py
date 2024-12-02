@@ -6,7 +6,6 @@ from time import sleep
 from zipfile import ZipFile, ZIP_DEFLATED
 
 from telebot.async_telebot import AsyncTeleBot
-import aiohttp
 from telebot.types import InputFile
 
 import config
