@@ -5,17 +5,27 @@ from datetime import datetime
 from time import sleep
 from zipfile import ZipFile, ZIP_DEFLATED
 
+import telebot.types
 from telebot.async_telebot import AsyncTeleBot
 from telebot.types import InputFile
 
 import config
 
 bot = AsyncTeleBot(token=config.token)
+asyncio.run(bot.set_my_commands(
+    commands=[
+        telebot.types.BotCommand('stop', 'Остановить бота'),
+        telebot.types.BotCommand('status', 'Получить статус бота'),
+        telebot.types.BotCommand('post', 'Публиковать сборку')
+    ]
+))
 
 
-@bot.message_handler(commands=['help', 'start'])
-async def send_welcome(message):
-    await bot.reply_to(message, 'Hello!')
+async def log(message, func):
+    text = f'Была попытка использовать команду "{func}" пользователем {message.from_user.username} ({message.from_user.id})'
+    print(text)
+    await bot.send_message(config.developer_id, text)
+    await bot.reply_to(message, 'У вас нет доступа к данной команде')
 
 
 @bot.message_handler(commands=['stop'])
@@ -23,6 +33,12 @@ async def stop_bot(message):
     if message.from_user.id == config.developer_id:
         await bot.reply_to(message, 'Bot is stopping...')
         await bot.close_session()
+    else:
+        await log(message, 'stop')
+
+
+@bot.message_handler(commands=['status'])
+async def get_status(message): await bot.reply_to(message, 'Bot online.')
 
 
 @bot.message_handler(commands=['post'])
@@ -36,6 +52,8 @@ async def post_message(message):
             delete = await bot.send_message(config.channel_id, f'An error occurred: {e}')
             sleep(5)
             await bot.delete_message(config.channel_id, delete.id)
+    else:
+        await log(message, 'post')
 
 
 async def set_changelog(message):
@@ -49,7 +67,8 @@ async def set_changelog(message):
                            f'<a href="https://t.me/sgbuild/{message_for_edit.message_id}">Сборка уже публикуется в канале!</a>'
                            , parse_mode='HTML')
         await build_and_archive_solution(message_for_edit, 'Debug', config.solution_file, caption=message.text)
-        pass
+    else:
+        await log(message, 'set_changelog')
 
 
 async def build_and_archive_solution(message, configuration, solution_path, archive_name='sakuragram.zip', caption=None):
