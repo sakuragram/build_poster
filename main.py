@@ -25,20 +25,20 @@ async def log(message, func):
     text = f'Была попытка использовать команду "{func}" пользователем {message.from_user.username} ({message.from_user.id})'
     print(text)
     await bot.send_message(config.developer_id, text)
-    await bot.reply_to(message, 'У вас нет доступа к данной команде')
+    await bot.reply_to(message, '❌ У вас нет доступа к данной команде')
 
 
 @bot.message_handler(commands=['stop'])
 async def stop_bot(message):
     if message.from_user.id == config.developer_id:
-        await bot.reply_to(message, 'Bot is stopping...')
+        await bot.reply_to(message, '❌ Бот остановлен.')
         await bot.close_session()
     else:
         await log(message, 'stop')
 
 
 @bot.message_handler(commands=['status'])
-async def get_status(message): await bot.reply_to(message, 'Bot online.')
+async def get_status(message): await bot.reply_to(message, f'✅ Бот работает.\n🚽 Debug mode: {config.debug}')
 
 
 @bot.message_handler(commands=['post'])
@@ -73,7 +73,7 @@ async def set_changelog(message):
 
 async def build_and_archive_solution(message, configuration, solution_path, archive_name='sakuragram.zip', caption=None):
     await bot.edit_message_text('Сборка...', message.chat.id, message.message_id)
-    msbuild_command = f'msbuild "{solution_path}" /t:Build /p:Configuration={configuration} /p:Platform=x64 /m /fl /flp:logfile=MyBuildLog.txt;verbosity=detailed /p:OutputPath="{config.build_output}/{configuration}"'
+    msbuild_command = f'msbuild "{solution_path}" /t:Build /p:Configuration={configuration} /p:Platform=x64 /m /fl /p:OutputPath="{config.build_output}/{configuration}"'
     subprocess.run(msbuild_command, shell=True, check=True)
 
     await bot.edit_message_text('Архивация...', message.chat.id, message.message_id)
@@ -101,8 +101,10 @@ async def build_and_archive_solution(message, configuration, solution_path, arch
 
 
 if __name__ == '__main__':
+    debug_mode = int(input("Debug mode? (0 - No, 1 - Yes): "))
+    config.debug = True if debug_mode == 1 else False
     print('Bot is running...')
-    asyncio.run(bot.send_message(config.developer_id, f'Бот работает.\nDebug mode: {config.debug}'))
+    asyncio.run(bot.send_message(config.developer_id, f'✅ Бот работает.\n🚽 Debug mode: {config.debug}'))
     asyncio.run(bot.polling())
     print('Bot stopped.')
-    asyncio.run(bot.send_message(config.developer_id, 'Бот остановлен.'))
+    asyncio.run(bot.send_message(config.developer_id, '❌ Бот остановлен.'))
