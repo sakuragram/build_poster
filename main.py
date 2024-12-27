@@ -1,5 +1,6 @@
 ﻿import asyncio
 import os
+import re
 import subprocess
 from datetime import datetime
 from time import sleep
@@ -10,13 +11,16 @@ from telebot.async_telebot import AsyncTeleBot
 from telebot.types import InputFile
 
 import config
+from config import android_build_path
 
 bot = AsyncTeleBot(token=config.token)
 asyncio.run(bot.set_my_commands(
     commands=[
         telebot.types.BotCommand('stop', 'Остановить бота'),
         telebot.types.BotCommand('status', 'Получить статус бота'),
-        telebot.types.BotCommand('post', 'Публиковать сборку')
+        telebot.types.BotCommand('post', 'Публиковать сборку'),
+        telebot.types.BotCommand('set_platform', 'Изменить платформу'),
+        telebot.types.BotCommand('get_platform', 'Получить платформу'),
     ]
 ))
 
@@ -41,12 +45,30 @@ async def stop_bot(message):
 async def get_status(message): await bot.reply_to(message, f'✅ Бот работает.\n🚽 Debug mode: {config.debug}')
 
 
+@bot.message_handler(commands=['set_platform'])
+async def set_platform(message):
+    if message.from_user.id == config.developer_id:
+        value = int(message.text.split()[1])
+        config.update_platform(value)
+        await bot.reply_to(message, '✅ Платформа изменена.')
+        print(f'Платформа изменена на {value}')
+    else:
+        await log(message, 'set_platform')
+
+
+@bot.message_handler(commands=['get_platform'])
+async def get_platform(message): await bot.reply_to(message, f'🖥️ Платформа: {config.load_config()["platform"]}')
+
+
 @bot.message_handler(commands=['post'])
 async def post_message(message):
     if message.from_user.id == config.developer_id:
         try:
-            await bot.reply_to(message, 'Введите список изменений:')
-            bot.register_message_handler(set_changelog, content_types=['text'])
+            if message.text.split()[1] == '':
+                await bot.reply_to(message, 'Введите список изменений:')
+                bot.register_message_handler(set_changelog, content_types=['text'])
+            else:
+                await set_changelog(message)
         except Exception as e:
             await bot.reply_to(message, f'An error occurred: {e}')
             delete = await bot.send_message(config.channel_id, f'An error occurred: {e}')
@@ -59,6 +81,7 @@ async def post_message(message):
 async def set_changelog(message):
     if message.from_user.id == config.developer_id:
         global message_for_edit
+        global caption
         if config.debug:
             message_for_edit = await bot.send_message(config.developer_id, 'Подготовка...')
         else:
@@ -66,7 +89,17 @@ async def set_changelog(message):
         await bot.reply_to(message,
                            f'<a href="https://t.me/sgbuild/{message_for_edit.message_id}">Сборка уже публикуется в канале!</a>'
                            , parse_mode='HTML')
-        await build_and_archive_solution(message_for_edit, 'Debug', config.solution_file, caption=message.text)
+
+        caption = message.text
+        regex = r'\/post'
+        pattern = re.compile(regex)
+        if pattern.search(caption):
+            caption = caption.replace('/post', '')
+
+        if config.load_config()["platform"] == 0:
+            await build_and_archive_solution(message_for_edit, 'Debug', config.solution_file, caption=caption)
+        elif config.load_config()["platform"] == 1:
+            await build_android(message_for_edit, 'Beta', 'Debug', caption=caption)
     else:
         await log(message, 'set_changelog')
 
@@ -98,6 +131,26 @@ async def build_and_archive_solution(message, configuration, solution_path, arch
     else:
         await bot.send_document(config.channel_id, file, caption=caption)
         await bot.delete_message(config.channel_id, message.message_id)
+
+async def build_android(message, architecture, configuration, caption=None):
+    print(f'Сборка {architecture}|{configuration}')
+    await bot.edit_message_text('Сборка...', message.chat.id, message.message_id)
+    gradlew_command = f'cd {config.android_path} && gradlew assemble{architecture}{configuration}'
+    subprocess.run(gradlew_command, shell=True, check=True)
+
+    await bot.edit_message_text('Отправка...', message.chat.id, message.message_id)
+    android_build_path = rf'{config.android_build_path}\app\build\outputs\apk\{architecture.lower()}\{configuration.lower()}'
+    archive_path  = os.listdir(android_build_path)
+    for file in archive_path:
+        if file.endswith(".apk"):
+            file = InputFile(open(os.path.join(android_build_path, file), 'rb'), file)
+
+            if config.debug:
+                await bot.send_document(config.developer_id, file,caption=caption)
+                await bot.delete_message(config.developer_id, message.message_id)
+            else:
+                await bot.send_document(config.channel_id, file, caption=caption)
+                await bot.delete_message(config.channel_id, message.message_id)
 
 
 if __name__ == '__main__':
