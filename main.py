@@ -11,7 +11,6 @@ from telebot.async_telebot import AsyncTeleBot
 from telebot.types import InputFile
 
 import config
-from config import android_build_path
 
 bot = AsyncTeleBot(token=config.token)
 asyncio.run(bot.set_my_commands(
@@ -64,16 +63,23 @@ async def get_platform(message): await bot.reply_to(message, f'🖥️ Плат�
 async def post_message(message):
     if message.from_user.id == config.developer_id:
         try:
-            if message.text.split()[1] == '':
+            if message.text.strip():
+                parts = message.text.split()
+                if len(parts) > 1:
+                    content = parts[1]
+                    await set_changelog(message)
+                else:
+                    await bot.reply_to(message, 'Введите список изменений:')
+                    bot.register_message_handler(set_changelog, content_types=['text'])
+            else:
                 await bot.reply_to(message, 'Введите список изменений:')
                 bot.register_message_handler(set_changelog, content_types=['text'])
-            else:
-                await set_changelog(message)
         except Exception as e:
             await bot.reply_to(message, f'An error occurred: {e}')
-            delete = await bot.send_message(config.channel_id, f'An error occurred: {e}')
-            sleep(5)
-            await bot.delete_message(config.channel_id, delete.id)
+            if debug_mode == 0:
+                delete = await bot.send_message(config.channel_id, f'An error occurred: {e}')
+                sleep(5)
+                await bot.delete_message(config.channel_id, delete.id)
     else:
         await log(message, 'post')
 
@@ -97,17 +103,17 @@ async def set_changelog(message):
             caption = caption.replace('/post', '')
 
         if config.load_config()["platform"] == 0:
-            await build_and_archive_solution(message_for_edit, 'Debug', config.solution_file, caption=caption)
+            await build_and_archive_solution(message_for_edit, 'Debug', config.proj_file, caption=caption)
         elif config.load_config()["platform"] == 1:
-            await build_android(message_for_edit, 'Beta', 'Debug', caption=caption)
+            await build_android(message_for_edit, 'Beta', 'Release', caption=caption)
     else:
         await log(message, 'set_changelog')
 
 
 async def build_and_archive_solution(message, configuration, solution_path, archive_name='sakuragram.zip', caption=None):
     await bot.edit_message_text('Сборка...', message.chat.id, message.message_id)
-    msbuild_command = f'msbuild "{solution_path}" /t:Build /p:Configuration={configuration} /p:Platform=x64 /m /fl /p:OutputPath="{config.build_output}/{configuration}"'
-    subprocess.run(msbuild_command, shell=True, check=True)
+    dotnet_command = f'dotnet publish {config.proj_file} -c {configuration} -r win-x64 -p:PublishSingleFile=true -o {config.build_output}/{configuration}'
+    subprocess.run(dotnet_command, shell=True, check=True)
 
     await bot.edit_message_text('Архивация...', message.chat.id, message.message_id)
     archive_path = os.path.join(config.build_output, configuration, archive_name)
